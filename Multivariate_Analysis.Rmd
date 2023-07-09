@@ -1,0 +1,583 @@
+---
+title: "STAT40150 Multivariate Analysis Assignment"
+author: "Aditya Prakash"
+date: "2023-03-18"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+1.
+
+```{r}
+
+# Load the data set
+data <- read.csv("/Users/adityaprakash/Downloads/Milk_MIR_Traits_data_2023.csv")
+
+# Set the seed
+set.seed(22201796)
+
+# Generate a random number between 1 and n (number of rows)
+n <- nrow(data)
+rand_row <- sample(1:n, 1)
+
+# Remove the randomly selected row from the dataset
+data <- data[-rand_row, ]
+
+```
+
+2.
+
+```{r}
+
+# Load the necessary libraries
+library(ggplot2)
+library(tidyr)
+
+# Remove rows with missing values for β Lactoglobulin B
+data <- data[!is.na(data$beta_lactoglobulin_b), ]
+
+# extract the MIR spectra columns
+spectra_cols <- data[, (ncol(data) - 530):ncol(data)]
+
+# extract the wavenumbers from the header row
+wavenumbers <- as.numeric(names(spectra_cols))
+
+# convert the spectra columns into a long format
+spectra_long <- spectra_cols %>% 
+  gather(key = "wavenumber", value = "absorbance", 1:ncol(spectra_cols))
+
+# plot all the spectra columns
+ggplot(data = spectra_long, aes(x = wavenumber, y = absorbance, group = wavenumber)) +
+  geom_line() +
+  labs(x = "Wavenumber (cm^-1)", y = "Absorbance")
+
+
+# Remove observations with β Lactoglobulin B outside of 3 standard deviations from the mean
+mean_beta_lactoglobulin_b <- mean(data$beta_lactoglobulin_b)
+sd_beta_lactoglobulin_b <- sd(data$beta_lactoglobulin_b)
+data <- data[abs(data$beta_lactoglobulin_b - mean_beta_lactoglobulin_b) <= 3 * sd_beta_lactoglobulin_b, ]
+
+# Histogram of beta_lactoglobulin_b
+ggplot(data = data, aes(x = beta_lactoglobulin_b)) +
+  geom_histogram(binwidth = 0.1, fill = "skyblue", color = "black") +
+  labs(x = "β Lactoglobulin B", y = "Frequency") +
+  theme_minimal()
+
+# Boxplot of beta_lactoglobulin_b
+ggplot(data = data, aes(y = beta_lactoglobulin_b)) +
+  geom_boxplot(fill = "skyblue", color = "black") +
+  labs(y = "β Lactoglobulin B") +
+  theme_minimal() +
+  coord_flip()
+
+
+```
+
+Interpretation:
+
+The MIR spectra plot displays the absorbance values for different wavenumbers. Each line represents a spectrum from a single observation in the dataset. The plot provides an overview of the general patterns and variation in the absorbance data across the wavenumbers. Some wavenumbers have higher absorbance values, which might be related to specific chemical bonds or functional groups present in the samples.
+
+After removing observations with β Lactoglobulin B values outside of 3 standard deviations from the mean, a histogram and a box plot of β Lactoglobulin B values are generated. These plots provide an overview of the distribution of β Lactoglobulin B values in the dataset.
+
+The histogram shows the frequency distribution of β Lactoglobulin B values, with the binwidth set to 0.1. The mean value of β Lactoglobulin B appears to be around 2.5, and the distribution is roughly symmetric, with most values falling close to the mean. The tails of the distribution are thin, which indicates that extreme values are relatively rare in the dataset.
+
+The box plot is another way to visualize the distribution of β Lactoglobulin B values. It shows the median, quartiles, and possible outliers in the data. The box represents the interquartile range (IQR), which contains the middle 50% of the data. The whiskers extend to the minimum and maximum values within 1.5 times the IQR, and any data points outside of this range are plotted as individual points, representing potential outliers. In this case, the box plot also indicates that the median value is close to the mean, and there are no visible outliers, as they were removed in a previous step. The box plot confirms the observations made from the histogram regarding the distribution of β Lactoglobulin B values.
+
+3.
+```{r}
+# Load the necessary libraries
+library(cluster)
+library(factoextra)
+library(ggplot2)
+
+# Scale the MIR spectra data
+spectra_scaled <- scale(spectra_cols)
+
+# Create a separate data frame for the MIR spectra data
+spectra_df <- data.frame(cbind(spectra = spectra_scaled, row_index = row.names(data)))
+
+# Elbow method to determine the appropriate number of clusters
+wss <- numeric(10)
+for (k in 1:10) {
+  kmeans_res <- kmeans(spectra_scaled, centers = k, nstart = 25)
+  wss[k] <- kmeans_res$tot.withinss
+}
+
+# Plot the total within-cluster sum of squares vs. the number of clusters
+elbow_plot <- fviz_nbclust(spectra_scaled, kmeans, method = "wss")
+print(elbow_plot)
+
+# Choose the appropriate number of clusters based on the elbow plot
+k_optimal <- 3
+
+# Hierarchical clustering
+dist_matrix <- dist(spectra_scaled, method = "euclidean")
+hc <- hclust(dist_matrix, method = "ward.D2")
+
+# K-means clustering
+set.seed(22201796)
+kmeans_res <- kmeans(spectra_scaled, centers = k_optimal, nstart = 25)
+
+# Add the cluster labels to the spectra data frame
+spectra_df$hc_cluster <- cutree(hc, k = k_optimal)
+spectra_df$kmeans_cluster <- kmeans_res$cluster
+
+# Merge the cluster labels back to the original dataset
+data <- merge(data, spectra_df[, c("row_index", "hc_cluster", "kmeans_cluster")], by.x = "row.names", by.y = "row_index")
+
+# Compare the cluster solutions
+table(data$hc_cluster, data$kmeans_cluster)
+
+# Plot the dendrogram for hierarchical clustering
+hc_dendrogram <- as.dendrogram(hc)
+plot(hc_dendrogram, main = "Dendrogram for Hierarchical Clustering", xlab = "Observations", ylab = "Height")
+
+# Add colored labels to the dendrogram based on the cutree result
+cut_labels <- cutree(hc, k = k_optimal)
+colored_labels <- rainbow(length(unique(cut_labels)))[as.numeric(factor(cut_labels))]
+plot(hc_dendrogram, main = "Dendrogram with Cluster Labels", xlab = "Observations", ylab = "Height")
+rect.hclust(hc, k = k_optimal, border = colored_labels)
+
+# Calculate the first two principal components
+pca <- prcomp(spectra_scaled, center = TRUE, scale. = TRUE)
+pca_scores <- pca$x[, 1:2]
+
+# Create a data frame for PCA scores and cluster labels
+pca_data <- data.frame(pca_scores, hc_cluster = data$hc_cluster, kmeans_cluster = data$kmeans_cluster)
+
+# Plot the first two principal components colored by k-means cluster membership
+ggplot(pca_data, aes(x = PC1, y = PC2, color = as.factor(kmeans_cluster))) +
+  geom_point(size = 3, alpha = 0.7) +
+  scale_color_discrete(name = "K-means Cluster") +
+  labs(x = "Principal Component 1", y = "Principal Component 2", title = "K-means Clustering on PCA scores") +
+  theme_minimal()
+
+```
+
+We have used different clustering techniques and methods to analyze the dataset. Here is a detailed explanation of the chosen functions, methods, and the number of clusters in the code:
+
+Libraries: We have used the following libraries for the analysis:
+cluster: Provides various clustering algorithms and related utility functions
+factoextra: Helps in extracting and visualizing the output of various clustering and dimensionality reduction techniques
+ggplot2: Provides a powerful and flexible way to create high-quality plots
+
+Data preprocessing: We have scaled the MIR spectra data using the scale function. This is done to standardize the data, which is necessary before applying clustering algorithms, as it ensures that all features have equal importance during clustering.
+
+Elbow method: To determine the appropriate number of clusters (k) for k-means clustering, we have used the elbow method. We calculate the total within-cluster sum of squares (WSS) for different values of k (1 to 10) and plot WSS against k. The optimal k is the one where the plot shows an "elbow" - a point after which the WSS decreases at a slower rate. We found the optimal k to be 3.
+
+Hierarchical clustering: We have used the hclust function with Ward's minimum variance method (ward.D2). This method aims to minimize the total within-cluster variance. Ward's method is often considered more robust compared to other linkage methods.
+
+K-means clustering: We used the kmeans function with the optimal number of clusters determined by the elbow method. K-means is a popular clustering algorithm due to its simplicity and efficiency. We also set nstart = 25 to ensure the algorithm runs multiple times with different initial centroids, reducing the risk of finding a local minimum instead of the global minimum.
+
+Comparing the cluster solutions: We have compared the clusters obtained from hierarchical clustering and k-means clustering using a contingency table. This table shows the distribution of observations across the clusters generated by both methods, providing insights into how well the two methods agree.
+
+Visualizing the clustering solutions: We used the following visualizations to help understand the clustering structure:
+Dendrogram for hierarchical clustering: This plot shows the hierarchical structure of the data and helps understand the relationship between the observations.
+PCA plot: We performed Principal Component Analysis (PCA) to reduce the dimensionality of the data and plot the first two principal components. This plot allows us to visualize the clusters in a two-dimensional space, making it easier to identify any apparent structure in the data.
+
+The output is a contingency table that compares the cluster assignments of the observations resulting from the hierarchical clustering (hc_cluster) and the k-means clustering (kmeans_cluster). Each cell in the table shows the number of observations that are assigned to a particular cluster in both clustering solutions. Here's the interpretation of the table:
+
+ #       k-means\
+ # hc    1   2   3\
+ # 1    15 167   0\
+ # 2   116   0   0\
+ # 3     0   0   8\
+
+Cluster 1 in hierarchical clustering (hc_cluster) has 15 observations that also belong to cluster 1 in k-means clustering (kmeans_cluster) and 167 observations that belong to cluster 2 in k-means clustering. No observations in hc_cluster 1 belong to kmeans_cluster 3.
+
+Cluster 2 in hierarchical clustering has 116 observations that also belong to cluster 1 in k-means clustering. There are no observations in hc_cluster 2 that belong to kmeans_cluster 2 or 3.
+
+Cluster 3 in hierarchical clustering has 8 observations that also belong to cluster 3 in k-means clustering. There are no observations in hc_cluster 3 that belong to kmeans_cluster 1 or 2.
+
+From this comparison, we can see that the two clustering methods do not produce identical results, but there is some overlap in the assignment of observations to clusters. For example, most observations assigned to hc_cluster 1 are assigned to kmeans_cluster 2, and all observations in hc_cluster 2 are assigned to kmeans_cluster 1. This indicates that the two clustering methods agree to some extent, but they also have their unique characteristics in how they form clusters.
+
+4.
+
+```{r}
+# Load the necessary libraries
+library(ggplot2)
+
+# Perform PCA on the scaled spectral data
+pca <- prcomp(spectra_scaled, center = TRUE, scale. = TRUE)
+
+# Calculate the proportion of variance explained by each principal component
+explained_variance <- pca$sdev^2 / sum(pca$sdev^2)
+
+# Calculate the cumulative proportion of variance explained
+cumulative_explained_variance <- cumsum(explained_variance)
+
+# Plot the cumulative proportion of variance explained by the first 10 principal components
+df <- data.frame(PC = 1:10, Cumulative_Variance = cumulative_explained_variance[1:10])
+
+ggplot(df, aes(x = PC, y = Cumulative_Variance)) +
+  geom_point() +
+  geom_line() +
+  labs(x = "Principal Component", y = "Cumulative Proportion of Variance Explained",
+       title = "Cumulative Proportion of Variance Explained by the First 10 Principal Components") +
+  theme_minimal()
+
+```
+
+When applying principal components analysis (PCA) to the spectral data, we made the following decisions to ensure a reliable and interpretable analysis. Here, we discuss these decisions and explain why we believe that 3 principal components are sufficient to represent the spectral data.
+
+Data preprocessing: Before performing PCA, we scaled the spectral data so that each variable has a mean of 0 and a standard deviation of 1. This step is crucial because PCA is sensitive to the scale of the variables. If variables have different scales, the resulting principal components may be dominated by the variables with larger scales, leading to misleading results. By scaling the data, we ensure that all variables contribute equally to the PCA.
+
+Performing PCA: We used the prcomp() function in R to perform PCA on the scaled spectral data. This function computes the principal components, eigenvalues, and eigenvectors of the data. The resulting principal components are linear combinations of the original variables, ordered by the amount of variance they explain in the data. By using PCA, we aim to reduce the dimensionality of the data while retaining as much information as possible.
+
+Plotting the cumulative proportion of variance explained: To determine how many principal components are required to represent the spectral data, we plotted the cumulative proportion of variance explained by the first 10 principal components. This plot helps visualize the amount of information captured by each additional principal component and assists in selecting an appropriate number of components.
+
+Identifying the elbow point: In the cumulative proportion of variance explained plot, we observed an "elbow" at around 3 principal components. The elbow point represents a threshold where adding more components provides diminishing returns in terms of explained variance. This suggests that the first 3 principal components capture a significant proportion of the total variance in the data, while subsequent components contribute relatively little additional information.
+
+Based on the elbow point in the plot, we believe that 3 principal components are sufficient to represent the spectral data. Using only the first 3 components, we can reduce the dimensionality of the data while still retaining a substantial amount of information. This simplifies further analyses and reduces computational complexity without sacrificing too much information from the original data. 
+
+5.
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+
+# Remove non-numeric columns
+numeric_data <- data[, sapply(data, is.numeric)]
+
+# Impute missing values with column medians
+numeric_data <- apply(numeric_data, 2, function(x) replace(x, is.na(x), median(x, na.rm = TRUE)))
+
+# Standardize the data
+standardized_data <- scale(numeric_data)
+
+# Calculate the covariance matrix
+cov_matrix <- cov(standardized_data)
+
+# Calculate eigenvalues and eigenvectors
+eigen_results <- eigen(cov_matrix)
+
+# Calculate the principal component scores
+pc_scores <- standardized_data %*% eigen_results$vectors
+
+# Convert to data frame
+pc_scores_df <- as.data.frame(pc_scores)
+
+# Plot the first two principal components
+ggplot(pc_scores_df, aes(x = V1, y = V2)) +
+  geom_point() +
+  xlab("Principal Component 1") +
+  ylab("Principal Component 2") +
+  ggtitle("Principal Component Scores for Milk Samples")
+
+
+```
+
+It appears that there are two distinct groups of observations in the dataset.
+
+One group of 8 observations located at the bottom left of the plot (around coordinates (0, -30) for PC1 and (0, -25) for PC2). These observations are likely to be different from the rest of the samples and might represent a subgroup or a specific type of milk sample with unique properties.
+
+The other group is bunched around the top right and middle right of the plot, representing the majority of the samples. This group is more homogeneous and likely represents the typical properties of most milk samples in the dataset.
+The first two principal components capture the maximum variation in the dataset. The fact that these two groups of observations are separated along the first two principal components suggests that they differ in some key characteristics
+
+6. 
+Principal Components Regression (PCR) Method Synopsis
+
+I. Purpose
+The purpose of the Principal Components Regression (PCR) method is to address the challenges of analyzing high-dimensional data (i.e., n < p data) where the number of observations (n) is less than the number of predictors (p). PCR is particularly useful in situations where multicollinearity is present, making ordinary least squares regression unsuitable. Examples of such applications include genomic studies, chemometrics, and spectroscopy (e.g., predicting the β Lactoglobulin B trait based on MIR spectra).
+
+II. Method Description
+PCR is a two-step procedure that combines Principal Components Analysis (PCA) with linear regression.
+
+Step 1: PCA is applied to the predictor variables to create a new set of orthogonal (uncorrelated) linear combinations called Principal Components (PCs). These PCs capture the majority of the variance present in the original predictors while significantly reducing the dimensionality of the data.
+
+Step 2: The PCs are then used as predictors in a standard linear regression model. The response variable is regressed on the selected PCs, resulting in a PCR model that explains the relationship between the response and the predictor variables.
+
+III. Method Choices
+
+1. Selection of the number of PCs: Choosing the appropriate number of PCs is crucial for PCR, as including too few PCs may result in a biased model, while using too many may lead to overfitting. Cross-validation is often employed to determine the optimal number of PCs, minimizing the prediction error.
+
+2. Scaling of predictor variables: Before applying PCA, it is essential to standardize the predictor variables by centering them around their mean and scaling them by their standard deviation. This ensures that each predictor contributes equally to the PCs, avoiding undue influence by variables with larger variances.
+IV. Advantages and Disadvantages
+
+Advantages:
+
+1. Dimensionality reduction: PCR is effective in reducing the dimensionality of high-dimensional datasets, making the analysis computationally tractable.
+
+2. Multicollinearity handling: By generating uncorrelated PCs, PCR mitigates the issues of multicollinearity in the original predictors.
+Interpretability: PCR models can be more interpretable due to the reduced number of predictors, simplifying complex relationships in the data.
+
+Disadvantages:
+
+1. Loss of interpretability: The transformation of predictors into PCs can make it challenging to directly relate PCs to the original predictor variables, limiting the interpretability of the coefficients.
+
+2. Incomplete variance capture: If an insufficient number of PCs is chosen, the model may not capture all the relevant variance in the predictors, leading to suboptimal predictions.
+
+References:
+James, G., Witten, D., Hastie, T., & Tibshirani, R. (2021). An Introduction to Statistical Learning with Applications in R. Springer.
+
+Hastie, T., Tibshirani, R., & Friedman, J. (2017). The Elements of Statistical Learning. Springer.
+
+Mevik, B.-H., & Wehrens, R. (2007). The pls Package: Principal Component and Partial Least Squares Regression in R. Journal of Statistical Software, 18(2), 1-24
+
+7.
+```{r}
+# Load required libraries
+library(pls)
+
+# Load dataset and preprocess
+scaled_spectra <- spectra_scaled
+
+response <- data$beta_lactoglobulin_b
+
+# Split the data into training and test sets (2:1 ratio)
+set.seed(22201796)
+n <- nrow(data)
+train_idx <- sample(seq_len(n), size = n * 2/3)
+
+train_spectra <- scaled_spectra[train_idx, ]
+train_response <- response[train_idx]
+
+test_spectra <- scaled_spectra[-train_idx, ]
+test_response <- response[-train_idx]
+
+# Train PCR model using training data with cross-validation
+pcr_model <- pcr(train_response ~ train_spectra, validation = "CV")
+
+# Determine optimal number of PCs based on RMSEP
+validation_stats <- RMSEP(pcr_model)
+optimal_npcs <- which.min(validation_stats$val[1, 1, ])
+
+# Retrain PCR model with optimal number of PCs
+final_pcr_model <- pcr(train_response ~ train_spectra, ncomp = optimal_npcs)
+
+# Predict β Lactoglobulin B levels for test set using final PCR model
+predictions <- predict(final_pcr_model, newdata = test_spectra)
+
+# Create a comparison DataFrame with observed and predicted β Lactoglobulin B values
+comparison_df <- data.frame(
+  Observed = test_response,
+  Predicted = predictions
+)
+
+# Display the comparison DataFrame
+print(comparison_df)
+
+# Calculate the Root Mean Square Error (RMSE)
+rmse <- sqrt(mean((test_response - predictions)^2))
+
+# Display the RMSE
+cat("RMSE for the PCR model:", rmse, "\n")
+
+```
+
+The decisions made in the code can be motivated by the following explanations:
+
+Data partition: In the code, the data is split into a training set (2/3) and a test set (1/3). This is a common practice for evaluating the performance of a predictive model. It helps to assess how well the model generalizes to unseen data, avoiding overfitting. A 2/3 to 1/3 split ratio is a common choice for maintaining a balance between having enough data for training and a reasonable test set size for validation.
+
+Scaling: The spectra data is scaled before performing PCR. Scaling is important because the magnitudes of the original variables may vary significantly. By scaling the data, each variable contributes equally to the analysis, eliminating potential bias due to differences in variable magnitudes.
+
+Cross-validation: In the code, k-fold cross-validation (with k=10) is used to determine the optimal number of principal components (PCs) for PCR. Cross-validation helps to assess the model's performance on different subsets of the training data, reducing the risk of overfitting. It also provides a more accurate estimation of the model's performance on unseen data. Ten-fold cross-validation is a popular choice for balancing computational complexity and the reliability of the performance estimation.
+
+Selection of optimal number of PCs: The code selects the optimal number of PCs by finding the minimum cross-validated root mean squared error of prediction (RMSEP). This approach is used to find the best trade-off between model complexity (number of PCs) and prediction accuracy, minimizing the error while avoiding overfitting.
+
+In this case, the RMSE for the PCR model is 1.559716. This value indicates the average error in predicting β Lactoglobulin B levels by the model.
+
+8. 
+
+```{r}
+
+# Extract the seven protein columns
+protein_data <- data[, c("kappa_casein", "alpha_s2_casein", "alpha_s1_casein", "beta_casein", "alpha_lactalbumin", "beta_lactoglobulin_a", "beta_lactoglobulin_b")]
+
+# Replace the 0 values in the "beta_lactoglobulin_b" column with NA
+protein_data$beta_lactoglobulin_b[protein_data$beta_lactoglobulin_b == 0] <- NA
+
+# Perform PCA using the prcomp function on complete cases
+complete_cases <- na.omit(protein_data)
+pca <- prcomp(complete_cases, center = TRUE, scale. = TRUE)
+
+# Center and scale the protein_data
+scaled_protein_data <- scale(protein_data, center = pca$center, scale = pca$scale)
+
+# Create a function to perform SVD-based matrix completion
+fit_svd <- function(X, M = 1) {
+  X_complete <- X[complete.cases(X), ]
+  svdob <- svd(X_complete)
+  with(svdob, u[, 1:M, drop = FALSE] %*% (d[1:M] * t(v[, 1:M, drop = FALSE])))
+}
+
+# Initialize Xhat by replacing missing values with the column means of the non-missing entries
+Xhat <- scaled_protein_data
+xbar <- colMeans(scaled_protein_data, na.rm = TRUE)
+ismiss <- is.na(scaled_protein_data)
+Xhat[ismiss] <- xbar[col(scaled_protein_data)[ismiss]]
+
+# Set up the iteration parameters
+thresh <- 1e-7
+rel_err <- 1
+iter <- 0
+mssold <- mean((scaled_protein_data[!ismiss])^2)
+mss0 <- mean(scaled_protein_data[!ismiss]^2)
+
+# Perform matrix completion using SVD
+while (rel_err > thresh) {
+  iter <- iter + 1
+  # Step 2(a)
+  Xapp <- fit_svd(Xhat, M = 1)
+  # Step 2(b)
+  Xhat[ismiss] <- Xapp[ismiss]
+  # Step 2(c)
+  mss <- mean(((scaled_protein_data - Xapp)[!ismiss])^2)
+  rel_err <- (mssold - mss) / mss0
+  mssold <- mss
+}
+
+# Impute the missing values using the PCA
+rows <- which(ismiss, arr.ind = TRUE)[, 1]
+cols <- which(ismiss, arr.ind = TRUE)[, 2]
+imputed_data <- sapply(1:length(rows), function(i) {
+  Xapp[rows[i], ] %*% t(pca$rotation[, cols[i]]) * pca$scale[cols[i]] + pca$center[cols[i]]
+})
+
+# Replace the original missing values in the protein_data with the imputed values
+for (i in 1:length(rows)) {
+  protein_data[rows[i], cols[i]] <- imputed_data[i]
+}
+
+# Check the imputed values for the "beta_lactoglobulin_b" column
+protein_data$beta_lactoglobulin_b
+
+```
+
+The code above performs the following steps to impute the missing values in the protein_data dataset:
+
+Extract the seven protein columns from the dataset and store them in a new variable called protein_data.
+
+Replace the 0 values in the "beta_lactoglobulin_b" column with NA to indicate missing values.
+
+Perform PCA on the complete cases (rows without missing values) using the prcomp() function from the base R package. This will help us understand the structure of the data and assist in imputing the missing values.
+
+Center and scale the protein_data using the center and scale information obtained from the PCA.
+
+Create a function called fit_svd() to perform SVD-based matrix completion, which will be used later in the iterative process to estimate the missing values.
+
+Initialize Xhat by replacing the missing values in the scaled_protein_data with the corresponding column means of the non-missing entries.
+
+Set up the iteration parameters for the matrix completion process, including a stopping threshold (thresh), a relative error (rel_err), and a counter for iterations (iter).
+
+Perform matrix completion using SVD in a while loop. In each iteration:
+
+a. Use the fit_svd() function to estimate the completed matrix Xapp.
+
+b. Update the missing values in Xhat with the corresponding values in Xapp.
+
+c. Calculate the mean squared error (MSE) between the original data and the current estimate Xapp, and update the relative error (rel_err) accordingly.
+
+Stop the iteration process when the relative error (rel_err) falls below the threshold (thresh).
+
+Impute the missing values in the original protein_data using the estimates from the completed matrix Xapp. This is done by multiplying the PCA rotation matrix by the imputed values in Xapp and adding back the center and scale information.
+Replace the original missing values in the protein_data with the imputed values.
+
+Check the imputed values for the "beta_lactoglobulin_b" column by printing the values in the column.
+The resulting protein_data now contains the imputed values for the missing entries in the "beta_lactoglobulin_b" column, which can be used for further analysis.
+
+
+9.(a)
+
+```{r}
+library(pls)
+
+# Set the seed for reproducibility
+set.seed(22201796)
+
+# Split the data into training and test sets (70/30)
+split_ratio <- 0.7
+n_samples <- nrow(data)
+train_idx <- sample(n_samples, size = floor(split_ratio * n_samples))
+test_idx <- setdiff(1:n_samples, train_idx)
+
+train_data <- data[train_idx, ]
+test_data <- data[test_idx, ]
+
+train_protein_data <- protein_data[train_idx, ]
+test_protein_data <- protein_data[test_idx, ]
+
+# Function to perform PCR with three different training sets
+perform_pcr <- function(train_response, train_data, test_data) {
+  max_ncomp <- ncol(train_data) - 1
+  pcr_model <- pcr(train_response ~ ., data = as.data.frame(cbind(train_response, train_data)), ncomp = max_ncomp, validation = "CV")
+  validation_stats <- RMSEP(pcr_model)
+  optimal_npcs <- which.min(validation_stats$val[1, 1, ])
+  final_pcr_model <- pcr(train_response ~ ., data = as.data.frame(cbind(train_response, train_data)), ncomp = optimal_npcs)
+  predictions <- predict(final_pcr_model, newdata = as.data.frame(test_data))
+  return(predictions)
+}
+
+# (a) Training set with all records with an observed, non-zero value of β Lactoglobulin B
+train_response_a <- train_data$beta_lactoglobulin_b[train_data$beta_lactoglobulin_b != 0]
+train_protein_data_a <- train_protein_data[train_data$beta_lactoglobulin_b != 0, ]
+
+predictions_a <- perform_pcr(train_response_a, train_protein_data_a, test_protein_data)
+
+# (b) Training set with all records, imputing 0 values with the observed mean
+train_response_b <- train_data$beta_lactoglobulin_b
+train_response_b[train_response_b == 0] <- mean(train_data$beta_lactoglobulin_b[train_data$beta_lactoglobulin_b != 0])
+
+predictions_b <- perform_pcr(train_response_b, train_protein_data, test_protein_data)
+
+# (c) Training set with all records, imputing 0 values with PCA
+train_response_c <- train_data$beta_lactoglobulin_b
+zero_idx <- train_response_c == 0
+train_response_c[zero_idx] <- protein_data$beta_lactoglobulin_b[train_idx][zero_idx]
+
+predictions_c <- perform_pcr(train_response_c, train_protein_data, test_protein_data)
+
+# Comparison
+comparison_df <- data.frame(
+  Observed = test_data$beta_lactoglobulin_b,
+  Predicted_a = predictions_a,
+  Predicted_b = predictions_b,
+  Predicted_c = predictions_c
+)
+
+comparison_df
+
+rmse_a <- sqrt(mean((test_data$beta_lactoglobulin_b - predictions_a)^2))
+rmse_b <- sqrt(mean((test_data$beta_lactoglobulin_b - predictions_b)^2))
+rmse_c <- sqrt(mean((test_data$beta_lactoglobulin_b - predictions_c)^2))
+
+cat("RMSE for model (a):", rmse_a, "\n")
+cat("RMSE for model (b):", rmse_b, "\n")
+cat("RMSE for model (c):", rmse_c, "\n")
+
+
+```
+
+The aim is to compare the performance of the PCR models trained on different datasets with imputed or non-imputed β Lactoglobulin B values.
+
+The code starts by loading the pls library, which is necessary for performing PCR.
+A seed is set for reproducibility, ensuring that the same results are obtained each time the code is run.
+The data is split into a 70/30 ratio for training and test sets using random sampling.
+The perform_pcr function is defined, which takes the training response, training data, and test data as inputs. This function fits a PCR model on the training data, determines the optimal number of principal components using cross-validation, and then predicts the response for the test data using the final PCR model with the optimal number of components.
+
+Three different PCR models are trained and tested:
+
+a) Model (a): The training set includes only records with an observed, non-zero value of β Lactoglobulin B.
+
+b) Model (b): The training set includes all records, with 0 values of β Lactoglobulin B replaced by the observed mean.
+
+c) Model (c): The training set includes all records, with 0 values of β Lactoglobulin B imputed using Principal Component Analysis (PCA).
+
+The predictions for each of the three models are computed using the perform_pcr function.
+
+The comparison DataFrame is created to display the observed β Lactoglobulin B values and the predicted values from each of the three models.
+
+The Root Mean Square Error (RMSE) is calculated for each of the three models to evaluate their performance. Lower RMSE values indicate better performance.
+
+Output interpretation:
+
+The output displays the RMSE values for each of the three PCR models:
+
+RMSE for model (a): 1.028626\
+RMSE for model (b): 1.040335\
+RMSE for model (c): 1.037671\
+
+Based on these values, Model (a), which uses only records with non-zero values of β Lactoglobulin B, performs the best, as it has the lowest RMSE. Model (b), which imputes 0 values with the observed mean, performs slightly worse, while Model (c), which imputes 0 values using PCA, has an intermediate performance between Model (a) and Model (b).
+
+In conclusion, for this specific problem and dataset, using only records with non-zero values of β Lactoglobulin B for the PCR model training (Model a) gives the best prediction performance.
