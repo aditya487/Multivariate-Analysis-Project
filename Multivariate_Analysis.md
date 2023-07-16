@@ -3,7 +3,12 @@ STAT40150 Multivariate Analysis Assignment
 Aditya Prakash
 2023-03-18
 
-1.  
+1.  Load the data set into R. Use the set.seed function in R to set the
+    seed to your student number. Randomly generate a number between 1
+    and n (where n is the number of rows in the dataset), and delete
+    that observation/row from the dataset. Ensure that you include the
+    code used in this step in the R code you submit with your assignment
+    so that your work can be reproduced.
 
 ``` r
 # Load the data set
@@ -20,7 +25,13 @@ rand_row <- sample(1:n, 1)
 data <- data[-rand_row, ]
 ```
 
-2.  
+2.  The milk protein β Lactoglobulin B is used in the production of
+    protein drinks. Remove from the dataset any record/observation which
+    has a missing/NA value for β Lactoglobulin B. Then, visualise the
+    spectra and the protein trait β Lactoglobulin B using (separate)
+    suitable plots. Comment on the plots. Remove any observations with β
+    Lactoglobulin B outside of 3 standard deviations from the mean of
+    the trait.
 
 ``` r
 # Load the necessary libraries
@@ -111,7 +122,11 @@ they were removed in a previous step. The box plot confirms the
 observations made from the histogram regarding the distribution of β
 Lactoglobulin B values.
 
-3.  
+3.  Use hierarchical clustering and k-means clustering to determine if
+    there are clusters of similar MIR spectra in the data. Motivate any
+    decisions you make. Compare the hierarchical clustering and k-means
+    clustering solutions. Comment on/explore any clustering structure
+    you uncover, considering the data generating context.
 
 ``` r
 # Load the necessary libraries
@@ -298,7 +313,11 @@ hc_cluster 2 are assigned to kmeans_cluster 1. This indicates that the
 two clustering methods agree to some extent, but they also have their
 unique characteristics in how they form clusters.
 
-4.  
+4.  Apply principal components analysis to the spectral data, motivating
+    any decisions you make in the process. Plot the cumulative
+    proportion of the variance explained by the first 10 principal
+    components. How many principal components do you think are required
+    to represent the spectral data? Explain your answer.
 
 ``` r
 # Load the necessary libraries
@@ -370,7 +389,10 @@ still retaining a substantial amount of information. This simplifies
 further analyses and reduces computational complexity without
 sacrificing too much information from the original data.
 
-5.  
+5.  Derive the principal component scores for the milk samples from
+    first principles (i.e., you should not use an inbuilt function such
+    as predict(. . . )). Plot the principal component scores for the
+    milk samples. Comment on any structure you observe.
 
 ``` r
 # Load necessary libraries
@@ -424,7 +446,22 @@ maximum variation in the dataset. The fact that these two groups of
 observations are separated along the first two principal components
 suggests that they differ in some key characteristics
 
-6.  Principal Components Regression (PCR) Method Synopsis
+6.  Interest lies in predicting the β Lactoglobulin B trait based on the
+    MIR spectra. Principal components regression (PCR) is one approach
+    to doing so for such n \< p data. Research the principal components
+    regression method and how it works e.g., see An Introduction to
+    Statistical Learning with Applications in R by James et al. (2021),
+    The Elements of Statistical Learning by Hastie et al. (2017), and/or
+    the peer-reviewed journal article The pls Package: Principal
+    Component and Partial Least Squares Regression in R by Mevik and
+    Wehrens (2007). In your own words, write a maximum 1 page synopsis
+    of the PCR method. Your synopsis should (i) explain the method’s
+    purpose, (ii) provide a general description of how the method
+    works, (iii) detail any choices that need to be made when using the
+    method and (iv) outline the advantages and disadvantages of the
+    method.
+
+Principal Components Regression (PCR) Method Synopsis
 
 I. Purpose The purpose of the Principal Components Regression (PCR)
 method is to address the challenges of analyzing high-dimensional data
@@ -503,7 +540,9 @@ Mevik, B.-H., & Wehrens, R. (2007). The pls Package: Principal Component
 and Partial Least Squares Regression in R. Journal of Statistical
 Software, 18(2), 1-24
 
-7.  
+7.  Use the function pcr in the pls R package to use PCR to predict the
+    β Lactoglobulin B levels from the spectra for a test set, where the
+    test set is one third of the data. Motivate any decisions you make.
 
 ``` r
 # Load required libraries
@@ -706,7 +745,26 @@ In this case, the RMSE for the PCR model is 1.559716. This value
 indicates the average error in predicting β Lactoglobulin B levels by
 the model.
 
-8.  
+8.  Seven milk proteins, one of which is β Lactoglobulin B, are
+    important for the production of cheese and whey. Here, for some
+    records/observations the β Lactoglobulin B values are exactly 0,
+    while there are non-zero values for the other milk proteins for the
+    same records. Often records with such strange measurements are
+    deleted, arguably losing information. Here, rather than delete these
+    observations, the β Lactoglobulin B values of 0 could be treated as
+    ‘missing at random’. Often such missing values are imputed using
+    e.g., the mean of the observed β Lactoglobulin B values. In the
+    multivariate setting, matrix completion methods can be used to
+    impute such missing at random values. (Note that matrix completion
+    approaches are often used to power recommender systems such as
+    Netflix.) One matrix completion method uses principal components
+    analysis as detailed in section 12.3 in An Introduction to
+    Statistical Learning with Applications in R by James et al. (2021).
+    Read this section to understand how the method works. Write your own
+    code to impute the β Lactoglobulin B values that are 0 using
+    principal components analysis on the seven milk proteins data. You
+    must use the function prcomp or eigen in your solution. Comment on
+    the results you obtain.
 
 ``` r
 # Extract the seven protein columns
@@ -870,7 +928,14 @@ printing the values in the column. The resulting protein_data now
 contains the imputed values for the missing entries in the
 “beta_lactoglobulin_b” column, which can be used for further analysis.
 
-9.(a)
+9.Using PCR, predict the β Lactoglobulin B values from the MIR spectra
+for a test set where the training set contains: (a) all records with an
+observed, non-zero value of β Lactoglobulin B. (b) all records but where
+0 values of β Lactoglobulin B are imputed using the observed mean. (c)
+all records but where 0 values of β Lactoglobulin B values are imputed
+using principal components analysis. Comment on what you observe.
+
+1)  
 
 ``` r
 library(pls)
