@@ -1,10 +1,19 @@
+
 # Multivariate Analysis Project
 
-This project contains a detailed multivariate analysis of milk traits data using R. The analysis was originally performed as part of the STAT40150 Multivariate Analysis course. 
+This project contains a detailed multivariate analysis of milk traits data using R. The analysis was originally performed as part of the Multivariate Analysis course. 
+
+## Dataset Background
+
+The dataset used in this project is a part of an extensive research conducted by Sinead McParland, an Adjunct Associate Professor from the Animal and Grassland Research & Innovation at Teagasc. The research explores the use of big data in the Irish Dairy Industry, focusing on how various traits in milk vary among cows and their impact on the quality of milk produced.
+
+The dataset contains information from 622 milk samples from different breeds, ages, different research herds across Ireland, and different stages of lactation. Each of these samples has been analyzed for 14 individual traits including different types of milk proteins (Casein and Whey) and various technological traits such as heat stability, pH, and milk coagulation properties. The data was analyzed using mid-infrared (MIR) spectroscopy technology, which is a routine method of milk analysis globally.
+
+The dataset was used to carry out a partial least squares regression analysis, among other data reduction techniques, to predict various traits from the MIR spectra. The aim was to improve the efficiency and profitability of the dairy industry by identifying the cows that produce the best quality milk and thereby understanding which cows to keep and breed from.
 
 ## Overview
 
-The focus of this project is on Principal Component Analysis (PCA), Principal Component Regression (PCR), and handling missing values in the dataset. The dataset used in this project is a CSV file containing milk traits data for the year 2023.
+The focus of this project is on Principal Component Analysis (PCA), Principal Component Regression (PCR), and handling missing values in the dataset. 
 
 ## Files in this Repository
 
